@@ -1,6 +1,6 @@
 {
   "name": "@local/ding-chime",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "description": "DSH completion chime with a system-tray mute switch and a voice picker.",
   "license": "MIT",
