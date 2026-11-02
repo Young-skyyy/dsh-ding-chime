@@ -1,5 +1,9 @@
 # DSH 完成提示音（ding-chime）
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-fbbf24.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6)
+![DSH](https://img.shields.io/badge/DSH-plugin-4D6BFE)
+
 给 [DSH](https://github.com/deepseek-ai)（DeepSeek Harness）桌面版做的**任务完成提醒**插件：
 
 > 每轮对话结束 → 响一声柔和的提示音 + 任务栏按钮闪一下；想安静就点托盘铃铛静音，还能在 10 种音色里挑。
