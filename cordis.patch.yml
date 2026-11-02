@@ -1,0 +1,8 @@
+- insert:
+    - id: ding-chime
+      name: '@local/ding-chime'
+      config:
+        enabled: true
+        volume: 22
+        adaptiveVolume: true
+        sound: bell

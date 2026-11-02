@@ -1,0 +1,32 @@
+{
+  "name": "@local/ding-chime",
+  "version": "1.5.0",
+  "private": true,
+  "description": "DSH completion chime with a system-tray mute switch and a voice picker.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Young-skyyy/dsh-ding-chime.git"
+  },
+  "homepage": "https://github.com/Young-skyyy/dsh-ding-chime#readme",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "play.ps1",
+    "tray.ps1",
+    "DshChime.cs",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "assets/sounds/*.wav",
+    "assets/*.png"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" }
+  }
+}

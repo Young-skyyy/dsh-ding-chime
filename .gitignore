@@ -1,0 +1,6 @@
+# 忽略本机生成的音效（来自 Windows 自带音效，不能随仓库分发）
+assets/sounds/win-*.wav
+
+# 本地状态与日志
+*.log
+node_modules/
