@@ -178,47 +178,98 @@ $voices = @(
     @{ id = 'tech'; label = '电子（合成）'; group = 'synth' }
 )
 $script:soundItems = @{}
+$customDir = Join-Path (Split-Path -Parent $StateFile) 'sounds'
+if (-not (Test-Path -LiteralPath $customDir)) {
+    New-Item -ItemType Directory -Path $customDir -Force | Out-Null
+}
 
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $toggleItem = New-Object System.Windows.Forms.ToolStripMenuItem '静音提示音'
 $soundMenu = New-Object System.Windows.Forms.ToolStripMenuItem '音效'
+$speakItem = New-Object System.Windows.Forms.ToolStripMenuItem '朗读文字…'
+$folderItem = New-Object System.Windows.Forms.ToolStripMenuItem '打开自定义音效文件夹'
 $previewItem = New-Object System.Windows.Forms.ToolStripMenuItem '试听'
 $exitItem = New-Object System.Windows.Forms.ToolStripMenuItem '从托盘移除'
 
-$lastGroup = $null
-foreach ($voice in $voices) {
-    if ($lastGroup -and $voice.group -ne $lastGroup) {
-        [void]$soundMenu.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-    }
-    $lastGroup = $voice.group
-
-    $item = New-Object System.Windows.Forms.ToolStripMenuItem $voice.label
-    $item.Tag = $voice.id
-    # Voices converted from the local Windows install may not exist yet.
-    if ($SoundsDir -and -not (Test-Path -LiteralPath (Join-Path $SoundsDir "$($voice.id).wav"))) {
-        $item.Enabled = $false
-        $item.Text = "$($voice.label)（未生成）"
-    }
-    $item.add_Click({
-            param($sender, $eventArgs)
-            Select-Sound ([string]$sender.Tag)
-        })
-    [void]$soundMenu.DropDownItems.Add($item)
-    $script:soundItems[$voice.id] = $item
+function Get-CustomVoices {
+    if (-not (Test-Path -LiteralPath $customDir)) { return @() }
+    return @(Get-ChildItem -LiteralPath $customDir -Filter '*.wav' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 12)
 }
+
+function Build-SoundMenu {
+    $script:soundItems = @{}
+    $soundMenu.DropDownItems.Clear()
+
+    $lastGroup = $null
+    foreach ($voice in $voices) {
+        if ($lastGroup -and $voice.group -ne $lastGroup) {
+            [void]$soundMenu.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+        }
+        $lastGroup = $voice.group
+
+        $item = New-Object System.Windows.Forms.ToolStripMenuItem $voice.label
+        $item.Tag = $voice.id
+        # Voices converted from the local Windows install may not exist yet.
+        if ($SoundsDir -and -not (Test-Path -LiteralPath (Join-Path $SoundsDir "$($voice.id).wav"))) {
+            $item.Enabled = $false
+            $item.Text = "$($voice.label)（未生成）"
+        }
+        $item.add_Click({
+                param($sender, $eventArgs)
+                Select-Sound ([string]$sender.Tag)
+            })
+        [void]$soundMenu.DropDownItems.Add($item)
+        $script:soundItems[$voice.id] = $item
+    }
+
+    $custom = Get-CustomVoices
+    if ($custom.Count -gt 0) {
+        [void]$soundMenu.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+        foreach ($file in $custom) {
+            $label = if ($file.BaseName.Length -gt 28) { $file.BaseName.Substring(0, 28) + '…' } else { $file.BaseName }
+            $item = New-Object System.Windows.Forms.ToolStripMenuItem "自定义：$label"
+            $item.Tag = $file.FullName
+            $item.add_Click({
+                    param($sender, $eventArgs)
+                    Select-Sound ([string]$sender.Tag)
+                })
+            [void]$soundMenu.DropDownItems.Add($item)
+            $script:soundItems[$file.FullName] = $item
+        }
+    }
+}
+
+Build-SoundMenu
+$soundMenu.add_DropDownOpening({ Build-SoundMenu })
 
 [void]$menu.Items.Add($toggleItem)
 [void]$menu.Items.Add($soundMenu)
+[void]$menu.Items.Add($speakItem)
+[void]$menu.Items.Add($folderItem)
 [void]$menu.Items.Add($previewItem)
 [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 [void]$menu.Items.Add($exitItem)
 $notify.ContextMenuStrip = $menu
 
-function Start-Preview([string]$id) {
-    if (-not $PreviewScript -or -not $SoundsDir) { return }
-    $wav = Join-Path $SoundsDir "$id.wav"
-    if (-not (Test-Path -LiteralPath $wav)) { return }
+function Resolve-Wav([string]$value) {
+    if (-not $value) { return $null }
+    # An absolute path means a user-supplied file (custom folder, TTS output).
+    if ($value -match '^[A-Za-z]:\\' -or $value.StartsWith('\\')) {
+        if (Test-Path -LiteralPath $value) { return $value }
+        return $null
+    }
+    $wav = Join-Path $SoundsDir "$value.wav"
+    if (Test-Path -LiteralPath $wav) { return $wav }
+    return $null
+}
+
+function Start-Preview([string]$value) {
+    if (-not $PreviewScript) { return }
+    $wav = Resolve-Wav $value
+    if (-not $wav) { return }
     try {
         Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @(
             '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
@@ -230,11 +281,70 @@ function Start-Preview([string]$id) {
     catch { }
 }
 
-function Select-Sound([string]$id) {
+function Select-Sound([string]$value) {
     $state = Read-State
-    Write-State ([bool]$state.muted) $id
+    Write-State ([bool]$state.muted) $value
     Update-Ui
-    Start-Preview $id
+    Start-Preview $value
+}
+
+# Speak a sentence the user types, save it as a WAV and make it the chime.
+function Save-Speech([string]$text) {
+    Add-Type -AssemblyName System.Speech
+    $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+    try {
+        $voice = $synth.GetInstalledVoices() |
+            Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.Name -like 'zh*' } |
+            Select-Object -First 1
+        if ($voice) { $synth.SelectVoice($voice.VoiceInfo.Name) }
+        $name = 'tts-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.wav'
+        $path = Join-Path $customDir $name
+        $synth.SetOutputToWaveFile($path)
+        $synth.Speak($text)
+        return $path
+    }
+    finally {
+        $synth.Dispose()
+    }
+}
+
+function Show-SpeakDialog {
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = '朗读文字'
+    $form.Size = New-Object System.Drawing.Size(480, 190)
+    $form.StartPosition = 'CenterScreen'
+    $form.TopMost = $true
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+
+    $hint = New-Object System.Windows.Forms.Label
+    $hint.Text = '生成后会保存到自定义音效并立即设为提示音：'
+    $hint.SetBounds(14, 12, 440, 20)
+
+    $box = New-Object System.Windows.Forms.TextBox
+    $box.Multiline = $true
+    $box.SetBounds(14, 38, 436, 60)
+    $box.Text = '任务完成了'
+
+    $ok = New-Object System.Windows.Forms.Button
+    $ok.Text = '生成并试听'
+    $ok.SetBounds(240, 110, 100, 30)
+    $ok.DialogResult = 'OK'
+
+    $cancel = New-Object System.Windows.Forms.Button
+    $cancel.Text = '取消'
+    $cancel.SetBounds(350, 110, 100, 30)
+    $cancel.DialogResult = 'Cancel'
+
+    [void]$form.Controls.AddRange(@($hint, $box, $ok, $cancel))
+    $form.AcceptButton = $ok
+    $form.CancelButton = $cancel
+
+    if ($form.ShowDialog() -eq 'OK' -and $box.Text.Trim()) {
+        return $box.Text.Trim()
+    }
+    return $null
 }
 
 function Update-Ui {
@@ -272,6 +382,23 @@ $previewItem.add_Click({
         $state = Read-State
         $active = if ($state.sound) { [string]$state.sound } else { 'win-generic' }
         Start-Preview $active
+    })
+
+$speakItem.add_Click({
+        $text = Show-SpeakDialog
+        if (-not $text) { return }
+        try {
+            $path = Save-Speech $text
+            Select-Sound $path
+        }
+        catch {
+            Write-Log "speech failed: $($_.Exception.Message)"
+            [void][System.Windows.Forms.MessageBox]::Show("生成失败：$($_.Exception.Message)", 'DSH 提示音')
+        }
+    })
+
+$folderItem.add_Click({
+        try { Start-Process -FilePath 'explorer.exe' -ArgumentList $customDir | Out-Null } catch { }
     })
 
 $exitItem.add_Click({

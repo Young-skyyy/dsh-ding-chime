@@ -84,7 +84,23 @@ powershell -ExecutionPolicy Bypass -File tools/import-sources.ps1
 > ⚠️ **这些文件不在仓库里**，也不应该提交：它们是微软的系统素材，只允许在你自己这台机器上使用。
 > 仓库的 `.gitignore` 已经排除了它们；没有它们时插件会自动回落到随仓库分发的 `bell`。
 
-### 自己加音色
+### 自定义声音（DIY）
+
+除了内置音色，还能用**自己的声音**：
+
+**① 让它说话** —— 托盘右键 →「朗读文字…」，输入一句话（默认「任务完成了」），
+用 Windows 自带语音合成生成 WAV，立刻设为提示音并试听。
+（这台机器上用的是 `Microsoft Huihui Desktop`（zh-CN）；没有中文语音时退回默认语音。）
+
+**② 换成自己的音频** —— 托盘右键 →「打开自定义音效文件夹」，把 PCM WAV 丢进去，
+再在「音效」菜单最下面的**自定义**分组里选中它。
+
+- 只认 **WAV**（`System.Media.SoundPlayer` 的限制）。别的格式先转：
+  `ffmpeg -i in.mp3 -ac 1 -ar 44100 -c:a pcm_s16le out.wav`
+- 文件放在 `%LOCALAPPDATA%\dsh-ding-chime\sounds\`，菜单列出最近 12 个，按修改时间倒序。
+- 选中的自定义音效在 `state.json` 里是**绝对路径**（不是 id），移动文件后会自动回落到内置音色。
+
+### 自己加内置音色
 
 - 合成：改 `tools/make-chime.py` 里的 `VOICES` 表（频率、泛音、衰减、低通、回声、时长），
   运行 `python tools/make-chime.py`。

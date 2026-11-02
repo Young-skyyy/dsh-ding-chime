@@ -30,7 +30,7 @@
 
 import { spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SOUND_DIR = fileURLToPath(new URL('./assets/sounds/', import.meta.url))
@@ -86,20 +86,29 @@ function wavFor(id) {
 }
 
 /**
+ * A user-supplied file (custom folder or spoken text) is an absolute WAV path.
+ */
+function isCustomWav(value) {
+  return typeof value === 'string' && /\.wav$/i.test(value) && isAbsolute(value) && existsSync(value)
+}
+
+/**
  * Pick the voice that will actually play. The `win-*` samples are generated
  * locally from the user's own Windows installation and are not distributed, so
  * a fresh checkout falls back to the first shipped voice.
  */
-function resolveSound(id) {
-  if (typeof id === 'string' && SOUND_IDS.includes(id) && existsSync(wavFor(id))) return id
+function resolveSound(value) {
+  if (isCustomWav(value)) return value
+  if (typeof value === 'string' && SOUND_IDS.includes(value) && existsSync(wavFor(value))) return value
   for (const candidate of SOUND_IDS) {
     if (existsSync(wavFor(candidate))) return candidate
   }
   return DEFAULT_SOUND
 }
 
-function soundPath(id) {
-  return wavFor(resolveSound(id))
+function soundPath(value) {
+  const resolved = resolveSound(value)
+  return isAbsolute(resolved) ? resolved : wavFor(resolved)
 }
 
 function readState() {
