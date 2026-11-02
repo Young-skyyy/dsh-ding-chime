@@ -87,6 +87,9 @@ powershell -ExecutionPolicy Bypass -File tools/import-sources.ps1
 - 换源：把任意 WAV/MP3/OGG 丢进 `tools/import-sources.ps1` 的映射表再跑一遍，
   然后在 `index.js` 的 `SOUND_IDS` 和 `tray.ps1` 的 `$voices` 里登记 id。
 
+> 还没生成的本机音效会在托盘菜单里显示为「（未生成）」并且点不了；万一 `state.json` 里选了
+> 一个不存在的音色，响铃时会自动回落到当前可用的音色，不会变成没声音。
+
 ## 工作原理
 
 ```

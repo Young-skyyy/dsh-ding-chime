@@ -195,6 +195,11 @@ foreach ($voice in $voices) {
 
     $item = New-Object System.Windows.Forms.ToolStripMenuItem $voice.label
     $item.Tag = $voice.id
+    # Voices converted from the local Windows install may not exist yet.
+    if ($SoundsDir -and -not (Test-Path -LiteralPath (Join-Path $SoundsDir "$($voice.id).wav"))) {
+        $item.Enabled = $false
+        $item.Text = "$($voice.label)（未生成）"
+    }
     $item.add_Click({
             param($sender, $eventArgs)
             Select-Sound ([string]$sender.Tag)
